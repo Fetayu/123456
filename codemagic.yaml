@@ -1,44 +1,94 @@
 workflows:
-  ios-native-workflow:
-    name: iOS Native Workflow
-    max_build_duration: 120
+  svitlo-unsigned:
+    name: Svitlo unsigned IPA
     instance_type: mac_mini_m2
-    integrations:
-      app_store_connect: codemagic # Имя интеграции, которое ты задашь в настройках Codemagic
+    max_build_duration: 30
     environment:
-      ios_signing:
-        distribution_type: app_store # Варианты: app_store, ad_hoc, development, enterprise
-        bundle_identifier: com.example.app # Замени на свой Bundle ID
-      vars:
-        XCODE_WORKSPACE: "YourApp.xcworkspace" # Замени на имя твоего .xcworkspace (или используй XCODE_PROJECT для .xcodeproj)
-        XCODE_SCHEME: "YourApp" # Замени на имя твоей схемы в Xcode
-        APP_STORE_APPLE_ID: 1234567890 # Числовой Apple ID приложения из App Store Connect
       xcode: latest
-      cocoapods: default
     scripts:
-      - name: Install CocoaPods dependencies
+      - name: Restore folder layout
         script: |
-          if [ -f "Podfile" ]; then
-            pod install
-          fi
-      - name: Set up code signing settings on Xcode project
+          set -e
+          mkdir -p Svitlo/Assets.xcassets/AppIcon.appiconset
+          mv ./*.swift Svitlo/ 2>/dev/null || true
+          if [ -f icon-1024.png ]; then mv icon-1024.png Svitlo/Assets.xcassets/AppIcon.appiconset/; fi
+          cat > Svitlo/Assets.xcassets/Contents.json <<'EOF'
+          { "info" : { "author" : "xcode", "version" : 1 } }
+          EOF
+          cat > Svitlo/Assets.xcassets/AppIcon.appiconset/Contents.json <<'EOF'
+          {
+            "images" : [
+              { "filename" : "icon-1024.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" }
+            ],
+            "info" : { "author" : "xcode", "version" : 1 }
+          }
+          EOF
+          rm -f "Contents.json" "Contents (1).json"
+      - name: Install XcodeGen
+        script: brew install xcodegen
+      - name: Generate Xcode project
+        script: xcodegen generate
+      - name: Build without signing
         script: |
-          xcode-project use-profiles
-      - name: Increment build number
+          set -o pipefail
+          xcodebuild \
+            -project Svitlo.xcodeproj \
+            -scheme Svitlo \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+      - name: Package IPA
         script: |
-          cd $CM_BUILD_DIR
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
-          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
-      - name: Build ipa for distribution
-        script: |
-          xcode-project build-ipa \
-            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME"
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Svitlo.app Payload/
+          zip -qr Svitlo.ipa Payload
     artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
+      - Svitlo.ipa
+
+  svitlo-simulator:
+    name: Svitlo simulator build for Appetize
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      xcode: latest
+    scripts:
+      - name: Restore folder layout
+        script: |
+          set -e
+          mkdir -p Svitlo/Assets.xcassets/AppIcon.appiconset
+          mv ./*.swift Svitlo/ 2>/dev/null || true
+          if [ -f icon-1024.png ]; then mv icon-1024.png Svitlo/Assets.xcassets/AppIcon.appiconset/; fi
+          cat > Svitlo/Assets.xcassets/Contents.json <<'EOF'
+          { "info" : { "author" : "xcode", "version" : 1 } }
+          EOF
+          cat > Svitlo/Assets.xcassets/AppIcon.appiconset/Contents.json <<'EOF'
+          {
+            "images" : [
+              { "filename" : "icon-1024.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" }
+            ],
+            "info" : { "author" : "xcode", "version" : 1 }
+          }
+          EOF
+          rm -f "Contents.json" "Contents (1).json"
+      - name: Install XcodeGen
+        script: brew install xcodegen
+      - name: Generate Xcode project
+        script: xcodegen generate
+      - name: Build for simulator
+        script: |
+          set -o pipefail
+          xcodebuild build \
+            -project Svitlo.xcodeproj \
+            -scheme Svitlo \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+      - name: Zip the .app
+        script: |
+          cd build/Build/Products/Debug-iphonesimulator
+          zip -qr "$CM_BUILD_DIR/Svitlo-simulator.zip" Svitlo.app
+    artifacts:
+      - Svitlo-simulator.zip
