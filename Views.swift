@@ -276,7 +276,7 @@ struct SuggestField: View {
             TextField(title, text: $text)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
-                .autocorrectionDisabled(true)
+                .disableAutocorrection(true)
                 .onChange(of: text) { _ in
                     if focused { onEdit() }
                 }
@@ -533,7 +533,7 @@ struct SettingsView: View {
     @State private var showRaw = false
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     section("ТЕМА")
@@ -588,6 +588,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .navigationViewStyle(.stack)
     }
 
     private func section(_ t: String) -> some View {
