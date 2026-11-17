@@ -6,6 +6,25 @@ workflows:
     environment:
       xcode: latest
     scripts:
+      - name: Restore folder layout
+        script: |
+          set -e
+          mkdir -p Svitlo/Assets.xcassets/AppIcon.appiconset
+          mv ./*.swift Svitlo/ 2>/dev/null || true
+          if [ -f icon-1024.png ]; then mv icon-1024.png Svitlo/Assets.xcassets/AppIcon.appiconset/; fi
+          cat > Svitlo/Assets.xcassets/Contents.json <<'EOF'
+          { "info" : { "author" : "xcode", "version" : 1 } }
+          EOF
+          cat > Svitlo/Assets.xcassets/AppIcon.appiconset/Contents.json <<'EOF'
+          {
+            "images" : [
+              { "filename" : "icon-1024.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" }
+            ],
+            "info" : { "author" : "xcode", "version" : 1 }
+          }
+          EOF
+          rm -f "Contents.json" "Contents (1).json"
+          ls -R Svitlo
       - name: Install XcodeGen
         script: brew install xcodegen
       - name: Generate Xcode project
